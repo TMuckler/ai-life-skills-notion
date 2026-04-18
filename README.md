@@ -113,4 +113,4 @@ If you want a link-heavy, interconnected second brain with reference pages for e
 
 ## Credits
 
-Adapted from an Obsidian-based summarizer. Rewritten for Notion with the complexity stripped out.
+Adapted from [reysu/ai-life-skills](https://github.com/reysu/ai-life-skills). Rewritten for Notion with the complexity stripped out.
