@@ -16,8 +16,10 @@ All output goes under a top-level page called **Second Brain** in the user's Not
 |---|---|
 | `Article Summaries` | Web articles, blog posts, pasted text |
 | `Book Summaries` | Books (EPUB), PDFs, whitepapers |
-| `Youtube Summaries` | YouTube video summaries |
+| `Youtube Summaries / Channel Name` | YouTube video summaries, organized by channel |
 | `Sermons` | Sermon notes (from YouTube, audio, or PDF) |
+
+YouTube summaries use a two-level structure: a channel sub-page lives inside `Youtube Summaries`, and individual summary pages live inside that channel sub-page. The channel name comes from the `%(channel)s` field returned by `yt-dlp`.
 
 ## Requirements
 
@@ -83,7 +85,7 @@ Notion:notion-create-pages
   ]
 ```
 
-Cache the page IDs for the four folders for use in later steps.
+Cache the page IDs for the four folders for use in later steps. Channel sub-pages inside `Youtube Summaries` are created on demand in Step 3 — do not pre-create them here.
 
 If the Second Brain page exists, fetch it with `Notion:notion-fetch` using its page ID to discover child pages. If any of the four folders are missing, create only the missing ones.
 
@@ -278,13 +280,36 @@ Summary length must be **proportional** to the source material:
 
 | Content type | Notion parent page | Icon |
 |---|---|---|
-| YouTube video | Youtube Summaries | 🎬 |
+| YouTube video | Youtube Summaries / Channel Name | 🎬 |
 | Article / blog | Article Summaries | 📰 |
 | Whitepaper / PDF | Book Summaries | 📄 |
 | EPUB / book | Book Summaries | 📚 |
 | Podcast episode | Article Summaries | 🎙️ |
 | Lecture / talk | Article Summaries | 🎓 |
-| Sermon | Sermons | ⛪ |
+| Sermon | Sermons / Preacher or Church | ⛪ |
+
+### YouTube channel sub-page lookup (YouTube only)
+
+The channel name comes from `%(channel)s` in the `yt-dlp` metadata output. Before creating the summary page, check whether a sub-page for that channel already exists under `Youtube Summaries`:
+
+```
+Notion:notion-search
+  query: "<channel name>"
+  filters: {}
+  page_url: "<youtube_summaries_page_id>"
+  max_highlight_length: 0
+  page_size: 5
+```
+
+Verify the returned result's title matches the channel name exactly. If found, use that sub-page as the parent. If not found, create the channel sub-page first:
+
+```
+Notion:notion-create-pages
+  parent: { page_id: "<youtube_summaries_page_id>" }
+  pages: [{ properties: { title: "<Channel Name>" }, icon: "📺" }]
+```
+
+Cache the channel sub-page ID. Then create the summary page under it.
 
 ### Page structure (non-sermon)
 
@@ -295,6 +320,7 @@ The Notion page content should be structured as:
 > **Author/Creator:** Name
 > **Date:** YYYY-MM-DD
 > **Duration:** (if video/audio)
+> **Topics:** Topic1, Topic2, Topic3
 
 ---
 
@@ -308,7 +334,13 @@ The Notion page content should be structured as:
 ## [Section 2 Title]
 
 [...]
+
+## See Also
+
+- [Related Page Title](https://www.notion.so/<page_id>)
 ```
+
+**Topics line:** After summarizing, identify 2-5 topic keywords that describe the content's main theological, practical, or subject-matter themes. Use consistent vocabulary across summaries so Notion search can surface related pages (e.g., always "Sovereignty of God" not sometimes "God's Sovereignty"). Good topic examples: Soteriology, Prayer, Evangelism, Marriage, Idolatry, Holy Spirit, Assurance, Forgiveness, Ecclesiology, Hermeneutics, Church History, Apologetics, Sanctification, Eschatology, Covenant Theology, Spiritual Disciplines.
 
 ### Page structure (book)
 
@@ -316,6 +348,7 @@ The Notion page content should be structured as:
 > **Author:** Name
 > **Published:** Year
 > **ISBN:** (if known)
+> **Topics:** Topic1, Topic2, Topic3
 
 ---
 
@@ -329,6 +362,10 @@ The Notion page content should be structured as:
 ## Chapter 2: [Title]
 
 [...]
+
+## See Also
+
+- [Related Page Title](https://www.notion.so/<page_id>)
 ```
 
 ### Formatting rules for Notion
@@ -348,7 +385,7 @@ Safe markdown that always works in Notion `content`:
 
 1. `> 💡 **TLDR**` for the overview block (renders as a blockquote with emoji)
 2. `> 💬` for notable quotes (with speaker attribution)
-3. **Bold** key terms and important concepts inline rather than linking them
+3. **Bold** key terms and important concepts inline. **Bold + link** Scripture references to BibleGateway (see Bible verse linking section below)
 4. `---` horizontal rules to separate metadata from content
 5. Headings: `##` for major sections, `###` for subsections
 6. No frontmatter/YAML -- Notion doesn't use it
@@ -370,6 +407,55 @@ Notion:notion-create-pages
     content: "<assembled markdown content>"
   }]
 ```
+
+### Bible verse linking
+
+Every Scripture reference in the summary body should be a clickable link to BibleGateway (ESV). Use this URL pattern:
+
+```
+https://www.biblegateway.com/passage/?search=<encoded_reference>&version=ESV
+```
+
+Format the reference as a markdown link with the text bolded:
+
+```markdown
+**[Romans 8:28](https://www.biblegateway.com/passage/?search=Romans+8%3A28&version=ESV)**
+```
+
+URL encoding rules:
+- Spaces become `+`
+- Colons become `%3A`
+- Dashes (verse ranges) become `-` (no encoding needed)
+- Examples:
+  - `Romans 8:28-30` → `Romans+8%3A28-30`
+  - `1 Corinthians 2:14` → `1+Corinthians+2%3A14`
+  - `Psalm 139:14` → `Psalm+139%3A14`
+
+Apply this to all Scripture references in the summary body, the TLDR, and the metadata `> **Scripture:**` line (for sermons). Do NOT apply it inside `> 💬` quote blocks — those should preserve the speaker's words without turning them into links.
+
+### See Also cross-links
+
+After the final section of every summary (before any closing horizontal rule), add a `## See Also` section that links to 1-5 related pages already in the Second Brain. To find related pages, search the user's Notion workspace using the topic keywords from the `> **Topics:**` line:
+
+```
+Notion:notion-search
+  query: "<topic keyword>"
+  filters: {}
+  page_url: "<second_brain_page_id>"
+  max_highlight_length: 0
+  page_size: 5
+```
+
+Run 2-3 searches using different topic keywords. Collect unique results, exclude the page being created, and verify each result is actually relevant (not just a semantic false positive). Format as:
+
+```markdown
+## See Also
+
+- [Page Title](https://www.notion.so/<page_id_no_dashes>)
+- [Page Title](https://www.notion.so/<page_id_no_dashes>)
+```
+
+If the Second Brain is empty or no related pages exist, omit the See Also section entirely. Do not force it.
 
 **Large content warning:** For very long summaries (books with 20+ chapters, 8,000+ words of summary), the content may exceed size limits in a single call. If page creation fails due to content size, split the workflow:
 1. Create the page with the metadata block + TLDR + first batch of sections
@@ -455,6 +541,7 @@ Read the full transcript below. Create a structured, fully comprehensive set of 
 > **Scripture:** Book Chapter:Verse-Verse
 > **Date:** YYYY-MM-DD
 > **Source:** [Watch](YouTube URL)
+> **Topics:** Topic1, Topic2, Topic3
 
 ---
 
@@ -496,7 +583,7 @@ Verify the returned result's title matches exactly. If found, create the sermon 
 
 ## Key rules
 
-1. **No databases, no tags, no references, no people pages, no daily notes** -- just the summary page in the right folder
+1. **No databases, no tags, no references, no people pages, no daily notes** -- just the summary page in the right folder. YouTube summaries go in `Youtube Summaries / Channel Name / summary`, not directly in `Youtube Summaries`.
 2. **Bold key terms** inline instead of linking them
 3. **Metadata in a quote block** at the top of the page, not in frontmatter or properties
 4. **`> 💡 **TLDR**`** is mandatory on every summary
@@ -506,3 +593,6 @@ Verify the returned result's title matches exactly. If found, create the sermon 
 8. **Proportional depth** -- longer source = longer summary, per the depth table
 9. **Sermon flow is separate** -- sermons bypass the normal summary steps and use the dedicated sermon notes prompt
 10. **No transcripts saved** -- transcripts are used for processing only, not stored as separate pages
+11. **Topics line is mandatory** -- every summary gets a `> **Topics:**` line with 2-5 consistent keywords in the metadata block
+12. **Bible verses link to BibleGateway** -- every Scripture reference in the summary body becomes a bold clickable link to the ESV text on BibleGateway. Do not link verses inside quote blocks.
+13. **See Also cross-links** -- after the final section, search the Second Brain for related pages and add a `## See Also` section linking to 1-5 matches. Omit if none found.
